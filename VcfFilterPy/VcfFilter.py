@@ -1,4 +1,5 @@
 import operator
+import re
 
 ops = { 
     
@@ -49,8 +50,9 @@ def filter_vcf(vcf, conditions, how='any'):
              info_dict = get_info_dict(line)
              info_values = get_info_values(conditions, info_dict)
              
-             gt_conditions = [cond for cond in conditions if not cond.split(" ")[0] in info_dict.keys()]
-
+             gt_conditions = [cond for cond in conditions 
+                              if not re.sub(r"\[.*\]", "", cond.split(" ")[0]) in info_dict.keys()]
+             
              # store the genotype values to be tested for each sample in the vcf within a nested list
              gt_values = get_genotype_value(line, gt_conditions)
 
@@ -104,12 +106,25 @@ def get_info_values(conditions, info_dict):
     all_values = {}
 
     for cond in conditions:
-       field = cond.split(" ")[0]
+        field = cond.split(" ")[0]
+        alt_field = re.sub(r"\[.*\]", "", field)
 
-       if field in info_dict.keys():
-          v = info_dict.get(field) 
-          all_values[field] = v
-    
+        if alt_field in info_dict.keys():
+            v = info_dict.get(alt_field) 
+
+            # for string indexing fields with ',' in cells
+            if '[' in field:
+                index = int(field.split("[")[1].replace(']', ''))
+                field = field.split("[")[0]
+                all_values[field] = v.split(",")[index]
+            elif ',' in v:
+                all_values[field] = v.split(",")[0]
+            else:
+                all_values[field] = v
+
+       
+           
+    #print(all_values)
     return all_values
 
 
@@ -141,6 +156,7 @@ def get_genotype_value(line, conditions):
         for cond in conditions:
 
             field = cond.split(" ")[0]
+            alt_field = re.sub("\[.*\]", "", field)
             sam = sline[n]
             all_fields = sam.split(":")
             format_fields = sline[8].split(":")
@@ -154,11 +170,22 @@ def get_genotype_value(line, conditions):
                     #field_store.append(AB)
                     field_store['AB'] = AB
 
-                if field != 'AB' and all_fields[format_fields.index(field)] not in ['./.','']:
+                if field != 'AB' and all_fields[format_fields.index(alt_field)] not in ['./.','']:
 
-                    index = format_fields.index(field)
+                    index = format_fields.index(alt_field)
                     value = all_fields[index]
-                    field_store[field] = value
+                    #field_store[field] = value
+
+                    # for string indexing fields with ',' in cells
+                    if '[' in field:
+                        index = int(field.split("[")[1].replace(']', ''))
+                        field = field.split("[")[0]
+                        field_store[field] = value.split(",")[index]
+                    elif ',' in value:
+                        field_store[field] = value.split(",")[0]
+                    else:
+                        field_store[field] = value
+
 
     return all_field_store
 
@@ -168,7 +195,7 @@ def check_condition(conditions, values, combine="&"):
 
     Args:
         conditions: list of filtering conditions
-        values: values in which to test the conditions against
+        values: dict containing keys and values in which to test the conditions against
         combine: all (&) or any (|) conditions must be met
 
     Returns:
@@ -192,16 +219,16 @@ def check_condition(conditions, values, combine="&"):
         if val.replace(".", "").isdigit():
             val =float(val)
         # test the condition against the value
-    #    print(values)
-        test = values.get(field)
+        #print(values)
+        test = values.get(re.sub(r"\[.*\]", "", field))
         test = float(test) if str(test).replace(".", "").isdigit() else test
         
         if test:
+            #print(field, test, val)
             test_cond = op(test, val) 
             tested_sample.append(test_cond)
         else:
             tested_sample.append(False)
-
 
     if combine == "&":
         return all(tested_sample)
@@ -210,12 +237,19 @@ def check_condition(conditions, values, combine="&"):
         return any(tested_sample)
 
 
-# TODO: specify fields with commas (AC, AD etc.) and MANDATORY fields
+# TODO: specify fields with commas and MANDATORY fields
 
 f = '/home/david/projects/pdVCF/test/vcfs/testing.vcf'
 filter_vcf(f, ['GT = 1/1', 'DP > 100', 'AB > 0']) # == 3
 filter_vcf(f, ['GT = 1/1', 'DP > 100', 'AB > 0', 'AC < 50', 'DEPTH = 20']) # == 2
 
 f = '/home/david/projects/pdVCF/test/vcfs/testing3.vcf'
-#filter_vcf(f, ['GT = 1/1', 'DP > 100']) # == 257
-#filter_vcf(f, ['GT = 0/1', 'DP >= 50', 'GQ >= 30',  'DEPTH > 50']) # == 1896
+filter_vcf(f, ['GT = 1/1', 'DP > 100']) # == 257
+filter_vcf(f, ['GT = 0/1', 'DP >= 50', 'GQ >= 30',  'DEPTH > 50']) # == 1896
+
+f = '/home/david/projects/pdVCF/test/vcfs/testing4.vcf'
+filter_vcf(f, ['GT = 0/1', 'DP >= 50', 'AC[0] > 20', 'GQ >= 30']) # == 60
+filter_vcf(f, ['GT = 0/1', 'DP >= 50', 'AC[0] > 20', 'GQ >= 30', 'AD[1] >= 20']) # == 49
+
+
+
