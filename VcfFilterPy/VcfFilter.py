@@ -47,7 +47,7 @@ def filter_vcf(vcf, conditions, how='any'):
         
         if not line.startswith("#"):
              mand_dict = get_mand_dict(line)
-             mand_values = get_mand_values(conditions, mand_dict)
+             mand_values = get_info_values(conditions, mand_dict)
 
              info_dict = get_info_dict(line)
              info_values = get_info_values(conditions, info_dict)
@@ -78,22 +78,13 @@ def handle_headers(line):
     pass
 
 def get_mand_dict(line):
+    ''' Return a dict containing all the mandatory
+        fields (keys) and their values.
+    '''
     mandatory = line.split("\t")[:7]
     header = ['CHROM', 'POS', 'ID', 'REF', 'ALT', 'QUAL', 'FILTER']
     mand_dict = {x:y for x, y in zip(header, mandatory)}
     return mand_dict
-
-
-def get_mand_values(conditions, man_dict):
-    all_values = {}
-
-    for cond in conditions:
-        field = cond.split(" ")[0]
-        if field in man_dict.keys():
-            v = man_dict.get(field)
-            all_values[field] = v
-
-    return all_values
 
 
 def get_info_dict(line):
@@ -130,21 +121,35 @@ def get_info_values(conditions, info_dict):
 
         if alt_field in info_dict.keys():
             v = info_dict.get(alt_field) 
-
-            # for string indexing fields with ',' in cells
-            if '[' in field:
-                index = int(field.split("[")[1].replace(']', ''))
-                field = field.split("[")[0]
-                all_values[field] = v.split(",")[index]
-            elif ',' in v:
-                all_values[field] = v.split(",")[0]
-            else:
-                all_values[field] = v
-
-       
-           
+            all_values = assign_value(field, v, all_values)
+             
     #print(all_values)
     return all_values
+
+
+def assign_value(field, v, d):
+    ''' Assign a value to a key (field) and store in
+        the given dict.
+
+    Args:
+        field: VCF field (AD, AC, CHROM etc.)
+        v: value to assign to key
+        d: dict used to store VCF fields and their values
+
+    Returns:
+        updated dict
+    '''
+    # for string indexing fields with ',' in cells
+    if '[' in field:
+        index = int(field.split("[")[1].replace(']', ''))
+        field = field.split("[")[0]
+        d[field] = v.split(",")[index]
+    elif ',' in v:
+        d[field] = v.split(",")[0]
+    else:
+        d[field] = v
+    
+    return d
 
 
 def get_genotype_value(line, conditions):
@@ -163,21 +168,20 @@ def get_genotype_value(line, conditions):
 
     sline = line.split("\t")
 
-    all_field_store = []
+    all_value_store = []
 
     #check all samples genotype values in each line
     for n in range(9, len(sline)):
 
-        field_store = {}
-        all_field_store.append(field_store)
+        all_values = {}
+        all_value_store.append(all_values)
 
         # get all values in the given genotype fields
         for cond in conditions:
-
             field = cond.split(" ")[0]
             alt_field = re.sub("\[.*\]", "", field)
-            sam = sline[n]
-            all_fields = sam.split(":")
+
+            all_fields = sline[n].split(":")
             format_fields = sline[8].split(":")
 
             if all_fields[0] != './.' and len(all_fields) > 1:
@@ -186,27 +190,17 @@ def get_genotype_value(line, conditions):
                     AD = all_fields[format_fields.index('AD')]
                     DP = all_fields[format_fields.index('DP')]
                     AB = int(AD.split(",")[1]) / int(DP)
-                    #field_store.append(AB)
-                    field_store['AB'] = AB
+                    #all_values.append(AB)
+                    all_values['AB'] = AB
 
                 if field != 'AB' and all_fields[format_fields.index(alt_field)] not in ['./.','']:
 
                     index = format_fields.index(alt_field)
                     value = all_fields[index]
-                    #field_store[field] = value
+                    
+                    all_values = assign_value(field, value, all_values)
 
-                    # for string indexing fields with ',' in cells
-                    if '[' in field:
-                        index = int(field.split("[")[1].replace(']', ''))
-                        field = field.split("[")[0]
-                        field_store[field] = value.split(",")[index]
-                    elif ',' in value:
-                        field_store[field] = value.split(",")[0]
-                    else:
-                        field_store[field] = value
-
-
-    return all_field_store
+    return all_value_store
 
 
 def check_condition(conditions, values, combine="&"):
@@ -227,7 +221,6 @@ def check_condition(conditions, values, combine="&"):
     '''
     if not values:
         return False
-    #values = [float(x) if str(x).replace(".","").isdigit() else x for x in values ]
     
     tested_sample = []
     
@@ -237,8 +230,8 @@ def check_condition(conditions, values, combine="&"):
         op = ops[op_sign]
         if val.replace(".", "").isdigit():
             val =float(val)
+        
         # test the condition against the value
-        #print(values)
         test = values.get(re.sub(r"\[.*\]", "", field))
         test = float(test) if str(test).replace(".", "").isdigit() else test
         
