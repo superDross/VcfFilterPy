@@ -22,14 +22,13 @@ def filter_vcf(vcf, conditions, how='any'):
     Args:
         vcf: a vcf file
         conditions: a list of filtering conditions
-        how: specify whether all o any of the conditions
-             need to be met
+        how: specify whether all or any samples in the VCF need
+             to meet the conditions for the VCF to pass filter.
 
     Returns:
         filtered vcf
     '''
     vcf = open(vcf)
-    
     count = 0
 
     while True:
@@ -42,40 +41,47 @@ def filter_vcf(vcf, conditions, how='any'):
             print(count)
             break
         
+        # header
         if line.startswith("#"):
             handle_headers(line)
         
+        # vcf line
         if not line.startswith("#"):
-             mand_dict = get_mand_dict(line)
-             mand_values = get_info_values(conditions, mand_dict)
-
-             info_dict = get_info_dict(line)
-             info_values = get_info_values(conditions, info_dict)
-             
-             gt_conditions = [cond for cond in conditions 
-                              if not re.sub(r"\[.*\]", "", cond.split(" ")[0]) in info_dict.keys() and not cond.split(" ")[0] in mand_dict.keys()]
-             
-             # store the genotype values to be tested for each sample in the vcf within a nested list
-             gt_values = get_genotype_value(line, gt_conditions)
-
-             # combine gt and info values ONLY WORKS IN PYTHON 3.5
-             values = [{**info_values, **mand_values, **x} for x in gt_values]
-             
-             # test all genotype values in all samples for parsed conditions
-             tested_samples =  [check_condition(conditions, x) for x in values]
-                
-             if  how == 'any' and any(tested_samples):
-                count += 1
-                # print(line)
+            fline = filter_line(line, conditions, how)
+            count += 1 if fline else 0
 
 
-             if how == 'all' and all(tested_samples):
-                count += 1
-                # print(line)
-
- 
 def handle_headers(line):
     pass
+
+
+def filter_line(line, conditions, how):
+    ''' Filter a line of a vcf file with a set of conditions
+    '''
+    mand_dict = get_mand_dict(line)
+    mand_values = get_values(conditions, mand_dict)
+
+    info_dict = get_info_dict(line)
+    info_values = get_values(conditions, info_dict)
+    
+    gt_conditions = [cond for cond in conditions 
+                     if not re.sub(r"\[.*\]", "", cond.split(" ")[0]) in info_dict.keys() and not cond.split(" ")[0] in mand_dict.keys()]
+    
+    # store the genotype values to be tested for each sample in the vcf within a nested list
+    gt_values = get_genotype_value(line, gt_conditions)
+
+    # combine gt and info values ONLY WORKS IN PYTHON 3.5
+    values = [{**info_values, **mand_values, **x} for x in gt_values]
+    
+    # test all genotype values in all samples for parsed conditions (returns Boolean list, each element is a sample in the VCF line)
+    tested_samples =  [check_condition(conditions, x) for x in values]
+    
+    if how == 'any' and any(tested_samples):
+        return line
+
+    if how == 'all' and all(tested_samples):
+        return line
+ 
 
 def get_mand_dict(line):
     ''' Return a dict containing all the mandatory
@@ -102,7 +108,7 @@ def get_info_dict(line):
     return info_dict
 
 
-def get_info_values(conditions, info_dict):
+def get_values(conditions, info_dict):
     ''' Filter the info dict for fields present in the 
         given conditions.
 
@@ -181,45 +187,41 @@ def get_genotype_value(line, conditions):
             field = cond.split(" ")[0]
             alt_field = re.sub("\[.*\]", "", field)
 
-            all_fields = sline[n].split(":")
+            sam_fields = sline[n].split(":")
             format_fields = sline[8].split(":")
 
-            if all_fields[0] != './.' and len(all_fields) > 1:
+            if sam_fields[0] != './.' and len(sam_fields) > 1:
                 
-                if field == "AB" and all_fields[1] != "":
-                    AD = all_fields[format_fields.index('AD')]
-                    DP = all_fields[format_fields.index('DP')]
+                if field == "AB" and sam_fields[1] != "":
+                    AD = sam_fields[format_fields.index('AD')]
+                    DP = sam_fields[format_fields.index('DP')]
                     AB = int(AD.split(",")[1]) / int(DP)
                     #all_values.append(AB)
                     all_values['AB'] = AB
 
-                if field != 'AB' and all_fields[format_fields.index(alt_field)] not in ['./.','']:
+                if field != 'AB' and sam_fields[format_fields.index(alt_field)] not in ['./.','']:
 
                     index = format_fields.index(alt_field)
-                    value = all_fields[index]
+                    value = sam_fields[index]
                     
                     all_values = assign_value(field, value, all_values)
 
     return all_value_store
 
 
-def check_condition(conditions, values, combine="&"):
-    ''' Test the filtering conditions with the given values.
+def check_condition(conditions, sam_dict, combine="&"):
+    ''' Test the filtering conditions with a given samples vcf field values.
 
     Args:
         conditions: list of filtering conditions
-        values: dict containing keys and values in which to test the conditions against
+        sam_dict: dict containing fields for a sample in a vcf line 
+                  (keys e.g. GT, CHROME) and their corresponding values 
         combine: all (&) or any (|) conditions must be met
 
     Returns:
-        Boolean; True if all values meet the given conditions
-
-    Note:
-        The conditions and values order must be the same e.g. 
-        if the first element of conditions is for DP then the
-        first element of values should refer to a DP value.
+        Boolean; True if all/any values in the sam_dict meet the given conditions
     '''
-    if not values:
+    if not sam_dict:
         return False
     
     tested_sample = []
@@ -231,12 +233,12 @@ def check_condition(conditions, values, combine="&"):
         if val.replace(".", "").isdigit():
             val =float(val)
         
-        # test the condition against the value
-        test = values.get(re.sub(r"\[.*\]", "", field))
+        # get the samples value for the given field in the condition
+        test = sam_dict.get(re.sub(r"\[.*\]", "", field))
         test = float(test) if str(test).replace(".", "").isdigit() else test
         
+        # test the condition against the sample value
         if test:
-            #print(field, test, val)
             test_cond = op(test, val) 
             tested_sample.append(test_cond)
         else:
@@ -255,13 +257,13 @@ f = '/home/david/projects/pdVCF/test/vcfs/testing.vcf'
 filter_vcf(f, ['GT = 1/1', 'DP > 100', 'AB > 0']) # == 3
 filter_vcf(f, ['GT = 1/1', 'DP > 100', 'AB > 0', 'AC < 50', 'DEPTH = 20']) # == 2
 
-f = '/home/david/projects/pdVCF/test/vcfs/testing3.vcf'
-filter_vcf(f, ['GT = 1/1', 'DP > 100']) # == 257
-filter_vcf(f, ['GT = 0/1', 'DP >= 50', 'GQ >= 30',  'DEPTH > 50']) # == 1896
-filter_vcf(f, ['GT = 0/1', 'DP >= 50', 'GQ >= 30', 'AC[0] > 20', 'CHROM = 1', 'POS > 2235893', 'ID != .']) # == 3
-
-f = '/home/david/projects/pdVCF/test/vcfs/testing4.vcf'
-filter_vcf(f, ['GT = 0/1', 'DP >= 50', 'AC[0] > 20', 'GQ >= 30']) # == 60
-filter_vcf(f, ['GT = 0/1', 'DP >= 50', 'AC[0] > 20', 'GQ >= 30', 'AD[1] >= 20']) # == 49
+#f = '/home/david/projects/pdVCF/test/vcfs/testing3.vcf'
+#filter_vcf(f, ['GT = 1/1', 'DP > 100']) # == 257
+#filter_vcf(f, ['GT = 0/1', 'DP >= 50', 'GQ >= 30',  'DEPTH > 50']) # == 1896
+#filter_vcf(f, ['GT = 0/1', 'DP >= 50', 'GQ >= 30', 'AC[0] > 20', 'CHROM = 1', 'POS > 2235893', 'ID != .']) # == 3
+#
+#f = '/home/david/projects/pdVCF/test/vcfs/testing4.vcf'
+#filter_vcf(f, ['GT = 0/1', 'DP >= 50', 'AC[0] > 20', 'GQ >= 30']) # == 60
+#filter_vcf(f, ['GT = 0/1', 'DP >= 50', 'AC[0] > 20', 'GQ >= 30', 'AD[1] >= 20']) # == 49
 
 
