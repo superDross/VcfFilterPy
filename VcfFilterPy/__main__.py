@@ -1,5 +1,8 @@
 from Vcf import Vcf
 import argparse
+import subprocess
+import os
+
 
 def get_parser():
     parser = argparse.ArgumentParser(description='vcf filtering tool')
@@ -9,11 +12,18 @@ def get_parser():
     parser.add_argument('-n', '--no-print', help='do not print the filtered vcf')
     parser.add_argument('-o', '--out', help='name of filtered vcf file')
     parser.add_argument('-v', '--version', help='display the current version')
+    parser.add_argument('--test', action='store_true', help='test installation')
     return parser
 
 def cli():
     parser = get_parser()
     args = vars(parser.parse_args())
+
+    if args['test']:
+        here = os.path.realpath(__file__)
+        test = "/".join(here.split("/")[:-2]) + "/test/test_filters.py"
+        subprocess.call(['python3', test])
+        return
 
     if args['version']:
         print(__version__)
