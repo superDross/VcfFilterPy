@@ -58,20 +58,12 @@ def handle_headers(line):
 def filter_line(line, conditions, how):
     ''' Filter a line of a vcf file with a set of conditions
     '''
-    mand_dict = get_mand_dict(line)
-    mand_values = get_values(conditions, mand_dict)
+    # store all vcf fields in a dict
+    all_d = vcf_dict(line)
+    all_d = custom_fields(all_d, conditions)
+   
+    values = [get_values(conditions, x) for x in all_d]
 
-    info_dict = get_info_dict(line)
-    info_values = get_values(conditions, info_dict)
-    
-    gt_conditions = [cond for cond in conditions 
-                     if not re.sub(r"\[.*\]", "", cond.split(" ")[0]) in info_dict.keys() and not cond.split(" ")[0] in mand_dict.keys()]
-    
-    # store the genotype values to be tested for each sample in the vcf within a nested list
-    gt_values = get_genotype_value(line, gt_conditions)
-
-    # combine gt and info values ONLY WORKS IN PYTHON 3.5
-    values = [{**info_values, **mand_values, **x} for x in gt_values]
     
     # test all genotype values in all samples for parsed conditions (returns Boolean list, each element is a sample in the VCF line)
     tested_samples =  [check_condition(conditions, x) for x in values]
@@ -82,6 +74,24 @@ def filter_line(line, conditions, how):
     if how == 'all' and all(tested_samples):
         return line
  
+
+## VcfDict Object ##
+
+def vcf_dict(line):
+    ''' For every sample in a given vcf line, store the vcf fields
+        in a dictionary.
+
+    Returns:
+        a list of dicts, one for each sample in the given vcf line.
+    '''
+    mand_dict = get_mand_dict(line)
+    info_dict = get_info_dict(line)
+    all_gt_dicts = get_genotype_dicts(line)
+    # combine all 3 dicts, PYTHON 3.5 ONLY
+    combined = [{**mand_dict, **info_dict, **x} for x in all_gt_dicts]
+    return combined
+
+
 
 def get_mand_dict(line):
     ''' Return a dict containing all the mandatory
@@ -108,16 +118,61 @@ def get_info_dict(line):
     return info_dict
 
 
-def get_values(conditions, info_dict):
+def get_genotype_dicts(line):
+    ''' Get the genotype values for all samples in a vcf
+        line and store as a dict
+    '''
+    sline = line.split("\t")
+    # all sample genotype values
+    gt_dict_store = []
+
+    #check all samples genotype values in each line
+    for n in range(9, len(sline)):
+
+        sam_fields = sline[n].split(":")
+        format_fields = sline[8].split(":")
+        gt_dict = {x:y for x, y in zip(format_fields, sam_fields)}
+        gt_dict_store.append(gt_dict)
+     
+    return gt_dict_store
+
+
+def custom_fields(vcf_dict, conditions):
+    ''' Determine whether custom fields need to be created
+        in a given list of vcf dicts
+    '''
+    all_fields = [x.split(" ")[0] for x in conditions]
+
+    if 'AB' in all_fields:
+        vcf_dict = [calc_AB(x) for x in vcf_dict]
+    
+    return vcf_dict
+
+
+def calc_AB(d):
+    ''' Calculate the allele balance for each sample in 
+        a list of vcf dicts.
+    '''
+    AD = d.get("AD")
+    DP = d.get("DP")
+    if not AD == '':
+        AB = int(AD.split(",")[1]) / int(DP)
+        d['AB'] = AB
+    else:
+        d['AB'] = ''
+    return d
+
+
+def get_values(conditions, vcf_dict):
     ''' Filter the info dict for fields present in the 
         given conditions.
 
     Args:
         conditions: list of filtering conditions
-        info_dict: dictionary containing info fields and values for a vcf line
+        vcf_dict: dictionary containing info fields and values for a vcf line
 
     Returns:
-        filtered info_dict
+        filtered vcf_dict
     ''' 
     all_values = {}
 
@@ -125,11 +180,10 @@ def get_values(conditions, info_dict):
         field = cond.split(" ")[0]
         alt_field = re.sub(r"\[.*\]", "", field)
 
-        if alt_field in info_dict.keys():
-            v = info_dict.get(alt_field) 
+        if alt_field in vcf_dict.keys():
+            v = vcf_dict.get(alt_field) 
             all_values = assign_value(field, v, all_values)
-             
-    #print(all_values)
+    
     return all_values
 
 
@@ -145,12 +199,14 @@ def assign_value(field, v, d):
     Returns:
         updated dict
     '''
-    # for string indexing fields with ',' in cells
-    if '[' in field:
+    # vcftools fills some fields as '.' which breaks this func
+    v = '' if v == '.' else v
+
+    if '[' in str(field):
         index = int(field.split("[")[1].replace(']', ''))
-        field = field.split("[")[0]
-        d[field] = v.split(",")[index]
-    elif ',' in v:
+        field = re.sub(r"\[.*\]", "", field)
+        d[field] = v.split(",")[index] if "," in v else v
+    elif ',' in str(v):
         d[field] = v.split(",")[0]
     else:
         d[field] = v
@@ -158,55 +214,6 @@ def assign_value(field, v, d):
     return d
 
 
-def get_genotype_value(line, conditions):
-    ''' Get the genotype values for the genotype fields 
-        specified in a set of conditions from the parsed
-        vcf line and do so for each sample in the vcf.
-
-    Args:
-        line: vcf line
-        conditions: list of filtering conditions
-
-    Returns:
-        a nested list of genotype values where each list
-        represents a sample in the vcf 
-    '''
-
-    sline = line.split("\t")
-
-    all_value_store = []
-
-    #check all samples genotype values in each line
-    for n in range(9, len(sline)):
-
-        all_values = {}
-        all_value_store.append(all_values)
-
-        # get all values in the given genotype fields
-        for cond in conditions:
-            field = cond.split(" ")[0]
-            alt_field = re.sub("\[.*\]", "", field)
-
-            sam_fields = sline[n].split(":")
-            format_fields = sline[8].split(":")
-
-            if sam_fields[0] != './.' and len(sam_fields) > 1:
-                
-                if field == "AB" and sam_fields[1] != "":
-                    AD = sam_fields[format_fields.index('AD')]
-                    DP = sam_fields[format_fields.index('DP')]
-                    AB = int(AD.split(",")[1]) / int(DP)
-                    #all_values.append(AB)
-                    all_values['AB'] = AB
-
-                if field != 'AB' and sam_fields[format_fields.index(alt_field)] not in ['./.','']:
-
-                    index = format_fields.index(alt_field)
-                    value = sam_fields[index]
-                    
-                    all_values = assign_value(field, value, all_values)
-
-    return all_value_store
 
 
 def check_condition(conditions, sam_dict, combine="&"):
@@ -257,13 +264,13 @@ f = '/home/david/projects/pdVCF/test/vcfs/testing.vcf'
 filter_vcf(f, ['GT = 1/1', 'DP > 100', 'AB > 0']) # == 3
 filter_vcf(f, ['GT = 1/1', 'DP > 100', 'AB > 0', 'AC < 50', 'DEPTH = 20']) # == 2
 
-#f = '/home/david/projects/pdVCF/test/vcfs/testing3.vcf'
-#filter_vcf(f, ['GT = 1/1', 'DP > 100']) # == 257
-#filter_vcf(f, ['GT = 0/1', 'DP >= 50', 'GQ >= 30',  'DEPTH > 50']) # == 1896
-#filter_vcf(f, ['GT = 0/1', 'DP >= 50', 'GQ >= 30', 'AC[0] > 20', 'CHROM = 1', 'POS > 2235893', 'ID != .']) # == 3
-#
-#f = '/home/david/projects/pdVCF/test/vcfs/testing4.vcf'
-#filter_vcf(f, ['GT = 0/1', 'DP >= 50', 'AC[0] > 20', 'GQ >= 30']) # == 60
-#filter_vcf(f, ['GT = 0/1', 'DP >= 50', 'AC[0] > 20', 'GQ >= 30', 'AD[1] >= 20']) # == 49
+f = '/home/david/projects/pdVCF/test/vcfs/testing3.vcf'
+filter_vcf(f, ['GT = 1/1', 'DP > 100']) # == 257
+filter_vcf(f, ['GT = 0/1', 'DP >= 50', 'GQ >= 30',  'DEPTH > 50']) # == 1896
+filter_vcf(f, ['GT = 0/1', 'DP >= 50', 'GQ >= 30', 'AC[0] > 20', 'CHROM = 1', 'POS > 2235893', 'ID != .']) # == 3
+
+f = '/home/david/projects/pdVCF/test/vcfs/testing4.vcf'
+filter_vcf(f, ['GT = 0/1', 'DP >= 50', 'AC[0] > 20', 'GQ >= 30']) # == 60
+filter_vcf(f, ['GT = 0/1', 'DP >= 50', 'AC[0] > 20', 'GQ >= 30', 'AD[1] >= 20']) # == 49
 
 
