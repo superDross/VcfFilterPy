@@ -46,5 +46,3 @@ python3 VcfFilterPy \
 --out out.vcf
 ```
 
-## To Do
-- Not storing the filtered_vcf as an attribute within the Vcf object will likely speed up the program substantially. Instead, appending it to a file or printing t the screen w should be better.
