@@ -1,7 +1,7 @@
 from Vcf import Vcf
 import argparse
 import subprocess
-import os
+import os, sys
 
 
 def get_parser():
@@ -11,7 +11,7 @@ def get_parser():
     parser.add_argument('-p', '--operator', default='any', help='detail whether all or any samples need to pass the filtering criteria to pass')
     parser.add_argument('-n', '--no-print', help='do not print the filtered vcf')
     parser.add_argument('-o', '--out', help='name of filtered vcf file')
-    parser.add_argument('-v', '--version', help='display the current version')
+    parser.add_argument('-v', '--version', action='store_true', help='display the current version')
     parser.add_argument('--test', action='store_true', help='test installation')
     return parser
 
@@ -33,7 +33,7 @@ def cli():
         raise ValueError("--operator only accepts 'any' or 'all' as an argument") 
     
     # create and filter the Vcf object
-    vcf = Vcf(args['vcf'])
+    vcf = Vcf(args['vcf'], sys.argv)
     conditions = [x.strip(" ") for x in args['filter'].split(",")]
     vcf.filter_vcf(conditions, args['operator'])
     print("{} variants remain".format(vcf.count))

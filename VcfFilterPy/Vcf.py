@@ -2,9 +2,10 @@ from VcfLine import VcfLine
 
 class Vcf(object):
 
-    def __init__(self, vcf):
+    def __init__(self, vcf, command=None):
         self.vcf = open(vcf)
         self.filtered_vcf = []
+        self.command = command
         self.count = None
 
     def filter_vcf(self, conditions, how='any'):
@@ -13,6 +14,7 @@ class Vcf(object):
         Args:
             vcf: a vcf file
             conditions: a list of filtering conditions
+            command: parsed command line string
             how: specify whether all or any samples in the VCF need
                  to meet the conditions for the VCF to pass filter.
         '''
@@ -24,13 +26,13 @@ class Vcf(object):
             if not line:
                 break
             
+            if line.startswith("#CHROM"):
+                if self.command:
+                    self.filtered_vcf.append('##source=' + ' '.join(self.command))
+
             if line.startswith("#"):
                 self.filtered_vcf.append(line)
            
-            if line.startswith("#CHROM"):
-                # Add the command used to filer just above #CHROM line
-                pass
-
             if not line.startswith("#"):
                 vline = VcfLine(line)
                 fline = vline.filter_line(conditions, how)
