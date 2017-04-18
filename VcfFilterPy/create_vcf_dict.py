@@ -1,6 +1,5 @@
 ''' Allows one to create a list of dictionarys for every sample in a vcf line.
 '''
-
 def vcfline2dict(line):
     ''' For every sample in a given vcf line, store the vcf fields
         in a dictionary.
@@ -15,7 +14,8 @@ def vcfline2dict(line):
     info_dict = get_info_dict(line)
     all_gt_dicts = get_genotype_dicts(line)
     # combine all 3 dicts, PYTHON 3.5 ONLY
-    combined = [{**mand_dict, **info_dict, **x} for x in all_gt_dicts]
+    #combined = [{**mand_dict, **info_dict, **x} for x in all_gt_dicts]
+    combined = [merge_dicts(mand_dict, info_dict, x) for x in all_gt_dicts]
     return combined
 
 
@@ -62,5 +62,18 @@ def get_genotype_dicts(line):
         gt_dict_store.append(gt_dict)
      
     return gt_dict_store
+
+
+def merge_dicts(*dict_args):
+    '''Given any number of dicts, shallow copy and merge into a new dict,
+       precedence goes to key value pairs in latter dicts.
+
+    Note:
+        in python 3.5; merged = {**dict1, **dict2, **dict3}
+    '''
+    result = {}
+    for dictionary in dict_args:
+        result.update(dictionary)
+    return result
 
 
