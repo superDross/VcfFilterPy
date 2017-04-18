@@ -8,7 +8,7 @@ class VcfLine(object):
     def __init__(self, line):
         self.line = line
         self.dicts = vcfline2dict(line)
-
+    
     def filter_line(self, conditions, how='any'):
         ''' Test a VcfLine against a set of conditions and return the orginal
             vcf line string if they are met.
@@ -24,14 +24,4 @@ class VcfLine(object):
             return self.line
  
     
-
-
-
-
-
-
-#f = '/home/david/projects/pdVCF/test/vcfs/testing.vcf'
-#filter_vcf(f, ['GT = 1/1', 'DP > 100', 'AB > 0']) # == 3
-#filter_vcf(f, ['GT = 1/1', 'DP > 100', 'AB > 0', 'AC < 50', 'DEPTH = 20']) # == 2
-
 

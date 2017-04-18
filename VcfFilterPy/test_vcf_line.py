@@ -1,7 +1,6 @@
 ''' Test a VcfLine dict against a set of conditions.
 '''
 import operator
-import re
 
 ops = { 
     
@@ -43,7 +42,7 @@ def test_vcf_line(conditions, sam_dict, combine="&"):
             val =float(val)
         
         # get the samples value for the given field in the condition
-        test = sam_dict.get(re.sub(r"\[.*\]", "", field))
+        test = sam_dict.get(field.split("[")[0])
         test = float(test) if str(test).replace(".", "").isdigit() else test
         
         # test the condition against the sample value

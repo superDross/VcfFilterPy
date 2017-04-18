@@ -1,5 +1,6 @@
 ''' Allows one to create a list of dictionarys for every sample in a vcf line.
 '''
+
 def vcfline2dict(line):
     ''' For every sample in a given vcf line, store the vcf fields
         in a dictionary.
@@ -17,7 +18,6 @@ def vcfline2dict(line):
     #combined = [{**mand_dict, **info_dict, **x} for x in all_gt_dicts]
     combined = [merge_dicts(mand_dict, info_dict, x) for x in all_gt_dicts]
     return combined
-
 
 
 def get_mand_dict(line):

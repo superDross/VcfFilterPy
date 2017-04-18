@@ -1,6 +1,5 @@
 ''' Allows one to filter a vcf dict line for fields present in a list of filtering conditions.
 '''
-import re
 
 def filter_dict_keys(conditions, vcf_dict):
     ''' Filter the vcf dict for fields present in the 
@@ -17,7 +16,7 @@ def filter_dict_keys(conditions, vcf_dict):
 
     for cond in conditions:
         field = cond.split(" ")[0]
-        alt_field = re.sub(r"\[.*\]", "", field)
+        alt_field = field.split("[")[0]
 
         if alt_field in vcf_dict.keys():
             v = vcf_dict.get(alt_field) 
@@ -41,9 +40,9 @@ def assign_value(field, v, d):
     # vcftools fills some fields as '.' which breaks this func
     v = '' if v == '.' else v
 
-    if '[' in str(field):
+    if '[' in field:
         index = int(field.split("[")[1].replace(']', ''))
-        field = re.sub(r"\[.*\]", "", field)
+        field = field.split("[")[0]
         d[field] = v.split(",")[index] if "," in v else v
     elif ',' in str(v):
         d[field] = v.split(",")[0]
