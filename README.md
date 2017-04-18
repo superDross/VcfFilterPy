@@ -40,7 +40,10 @@ Extremely complex filtering can be performed such as; filter for variants in chr
 ```bash
 python3 VcfFilterPy \
 --vcf test.py \
---filter 'CHROM = 1, POS > 2235893, AC[0] > 20, ID != ., GT = 0/1', DP >= 50, GQ >= 30' \
---operator 'any'
+--filter 'CHROM = 1, POS > 2235893, AC[0] > 20, ID != ., GT = 0/1, DP >= 50, GQ >= 30' \
+--operator 'any' \
 --out out.vcf
 ```
+
+## To Do
+- Not storing the filtered_vcf as an attribute within the Vcf object will likely speed up the program substantially. Instead, appending it to a file or printing t the screen w should be better.
