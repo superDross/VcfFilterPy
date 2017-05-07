@@ -5,6 +5,7 @@ Perform complex filtering upon a VCF file.
 To install and test VcfFilterPy
 ```bash
 git clone https://github.com/superDross/VcfFilterPy
+export PYTHONPATH=$PYTHONPATH:/path/to/VcfFilterPy/
 cd VcfFilterPy/
 python3 VcfFilterPy --test
 ```
@@ -46,3 +47,5 @@ python3 VcfFilterPy \
 --out out.vcf
 ```
 
+## Caveats
+This tool has not been designed to work with multi-allelic variants nor InDels.
