@@ -5,9 +5,9 @@ from test_vcf_line import test_vcf_line
 
 class VcfLine(object):
 
-    def __init__(self, line):
+    def __init__(self, line, csq_keys=None):
         self.line = line
-        self.dicts = vcfline2dict(line)
+        self.dicts = vcfline2dict(line, csq_keys)
     
     def filter_line(self, conditions, how='any'):
         ''' Test a VcfLine against a set of conditions and return the orginal

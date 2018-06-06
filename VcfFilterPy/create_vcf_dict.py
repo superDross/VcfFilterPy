@@ -1,7 +1,7 @@
 ''' Allows one to create a list of dictionarys for every sample in a vcf line.
 '''
 
-def vcfline2dict(line):
+def vcfline2dict(line, csq_keys):
     ''' For every sample in a given vcf line, store the vcf fields
         in a dictionary.
     
@@ -12,7 +12,7 @@ def vcfline2dict(line):
         a list of dicts, one for each sample in the given vcf line.
     '''
     mand_dict = get_mand_dict(line)
-    info_dict = get_info_dict(line)
+    info_dict = get_info_dict(line, csq_keys)
     all_gt_dicts = get_genotype_dicts(line)
     # combine all 3 dicts, PYTHON 3.5 ONLY
     #combined = [{**mand_dict, **info_dict, **x} for x in all_gt_dicts]
@@ -30,7 +30,7 @@ def get_mand_dict(line):
     return mand_dict
 
 
-def get_info_dict(line):
+def get_info_dict(line, csq_keys):
     ''' Return a dict containing all the info
         fields (keys) and their values.
     '''
@@ -41,7 +41,11 @@ def get_info_dict(line):
     sinfo = [[x[0],""] if len(x) < 2 else x for x in sinfo ]
     info_dict = {x[0]:x[1] for x in sinfo}
     info_dict['DEPTH'] = info_dict.pop('DP')
-    
+    csq_line = info_dict.get('CSQ')
+    if csq_line:
+        for k, i in zip(csq_keys, csq_line.split("|")):
+            info_dict[k] =  i
+        info_dict.pop('CSQ', None)
     return info_dict
 
 

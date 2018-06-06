@@ -7,6 +7,7 @@ class Vcf(object):
         self.filtered_vcf = []
         self.command = command # command run at the command line
         self.count = None
+        self.csq_keys = None
         
     def filter_vcf(self, conditions, how='any'):
         ''' Filter a Vcf based on a set of conditions.
@@ -29,11 +30,16 @@ class Vcf(object):
                 if self.command:
                     self.filtered_vcf.append('##source=' + ' '.join(self.command))
 
+            if line.startswith("##INFO=<ID=CSQ"):
+                s = 'Format: '
+                index = line.find(s)+len(s)
+                self.csq_keys = line[index:].split('|')
+
             if line.startswith("#"):
                 self.filtered_vcf.append(line)
            
             if not line.startswith("#"):
-                vline = VcfLine(line)
+                vline = VcfLine(line, self.csq_keys)
                 fline = vline.filter_line(conditions, how)
                 if fline:
                     self.filtered_vcf.append(fline)
